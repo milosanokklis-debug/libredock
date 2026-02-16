@@ -1,1 +1,1 @@
-Here is configuration for LibreNMS within docker compose
+This repo is a deployable LibreNMS docker compose
