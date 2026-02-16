@@ -1,58 +1,81 @@
+# this file will create a librenms instance with all its required dependancies
+
 name: librenms
 
 services:
+  # first it installs the database
   db:
+    # specifies the exact type, in this case a SQL mariadb
     image: mariadb:10
     container_name: librenms_db
     command:
+      # now sets the specific arguments / execuateables that run with the creation of the database
       - "mysqld"
       - "--innodb-file-per-table=1"
       - "--lower-case-table-names=0"
       - "--character-set-server=utf8mb4"
       - "--collation-server=utf8mb4_unicode_ci"
     volumes:
+      # creates a database folder that can be shared with the other services in the compose
       - "./db:/var/lib/mysql"
     environment:
+      # this takes the data from the env file and adds those details to the SQL database
       - "TZ=${TZ}"
       - "MARIADB_RANDOM_ROOT_PASSWORD=yes"
       - "MYSQL_DATABASE=${MYSQL_DATABASE}"
       - "MYSQL_USER=${MYSQL_USER}"
       - "MYSQL_PASSWORD=${MYSQL_PASSWORD}"
+    # makes it so the service will restart from crashes or computor shutdowns
     restart: always
-
+    
+  # redis is used to improve the speed of polling efforts 
   redis:
+    # specifies the image
     image: redis:7.2-alpine
     container_name: librenms_redis
     environment:
       - "TZ=${TZ}"
     restart: always
 
+  # the mail server is used to send notifications in the case of trap activations
   msmtpd:
     image: crazymax/msmtpd:latest
     container_name: librenms_msmtpd
     env_file:
+    # uses the enviromental details from the below file
       - "./msmtpd.env"
     restart: always
 
+  # this installs the librenms utility 
   librenms:
     image: librenms/librenms:latest
     container_name: librenms
     hostname: librenms
+    # this gives linux capabilities to a container
     cap_add:
+      # can administer networks
       - NET_ADMIN
+      # can use user defined sockets
       - NET_RAW
     ports:
+    # sets the port which libre will be accessable on
       - target: 8000
         published: 8000
         protocol: tcp
+
+    # lists the depenancies (Why the others were added first)
     depends_on:
       - db
       - redis
       - msmtpd
+    #sets the shared storage space
     volumes:
       - "./librenms:/data"
+  
+    # sets the enviroment that the librenms will use (NOT ACTUALLY EXISTING YET
     env_file:
       - "./librenms.env"
+    # from the .env file gets the below parameters
     environment:
       - "TZ=${TZ}"
       - "PUID=${PUID}"
@@ -64,7 +87,10 @@ services:
       - "DB_TIMEOUT=60"
     restart: always
 
+    
+  # adds the libre dispatcher package which manages polling without cron
   dispatcher:
+    # from the libre packeage
     image: librenms/librenms:latest
     container_name: librenms_dispatcher
     hostname: librenms-dispatcher
@@ -74,10 +100,14 @@ services:
     depends_on:
       - librenms
       - redis
+    # using the same volume as librenms service
     volumes:
       - "./librenms:/data"
+    # using the name envrioment file as libre
     env_file:
       - "./librenms.env"
+
+    # grabs all the same envrioment information
     environment:
       - "TZ=${TZ}"
       - "PUID=${PUID}"
@@ -86,12 +116,13 @@ services:
       - "DB_NAME=${MYSQL_DATABASE}"
       - "DB_USER=${MYSQL_USER}"
       - "DB_PASSWORD=${MYSQL_PASSWORD}"
+      # adds timeout incase data does not upload fast enough
       - "DB_TIMEOUT=60"
-      - "DISPATCHER_NODE_ID=dispatcher1"
-      - "SIDECAR_DISPATCHER=1"
     restart: always
 
+  # used to mange syslogs from various systems within librenms
   syslogng:
+    # specify the libre verison of the open source service
     image: librenms/librenms:latest
     container_name: librenms_syslogng
     hostname: librenms-syslogng
@@ -101,6 +132,7 @@ services:
     depends_on:
       - librenms
       - redis
+    # set the port to 514 tcp and udp
     ports:
       - target: 514
         published: 514
@@ -108,10 +140,13 @@ services:
       - target: 514
         published: 514
         protocol: udp
+    # use the same data collection volume
     volumes:
       - "./librenms:/data"
+    # use the same enviroment file
     env_file:
       - "./librenms.env"
+    # same information as needed in other libre services
     environment:
       - "TZ=${TZ}"
       - "PUID=${PUID}"
@@ -121,9 +156,9 @@ services:
       - "DB_USER=${MYSQL_USER}"
       - "DB_PASSWORD=${MYSQL_PASSWORD}"
       - "DB_TIMEOUT=60"
-      - "SIDECAR_SYSLOGNG=1"
     restart: always
 
+  # snmptrapd is used to setup and manage SNMP traps which will alert when conditions are met
   snmptrapd:
     image: librenms/librenms:latest
     container_name: librenms_snmptrapd
@@ -134,6 +169,7 @@ services:
     depends_on:
       - librenms
       - redis
+    # specifing the port as 162
     ports:
       - target: 162
         published: 162
@@ -154,5 +190,4 @@ services:
       - "DB_USER=${MYSQL_USER}"
       - "DB_PASSWORD=${MYSQL_PASSWORD}"
       - "DB_TIMEOUT=60"
-      - "SIDECAR_SNMPTRAPD=1"
     restart: always
